@@ -35,7 +35,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #define REG_ALARM       0x0009
 
 #define CMD_RHR         0x03
-#define CMD_RIR         0X04
+#define CMD_RIR         0X03
 #define CMD_WSR         0x06
 #define CMD_CAL         0x41
 #define CMD_REST        0x42
@@ -47,7 +47,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #define UPDATE_TIME     200
 
 #define RESPONSE_SIZE 32
-#define READ_TIMEOUT 100
+#define READ_TIMEOUT 1500
 
 #define INVALID_ADDRESS 0x00
 
@@ -187,6 +187,14 @@ float PZEM004Tv30::power()
         return NAN; // Update did not work, return NAN
 
     return _currentValues.power;
+}
+
+float PZEM004Tv30::apparentPower()
+{
+    if(!updateValues()) // Update vales if necessary
+        return NAN; // Update did not work, return NAN
+
+    return _currentValues.apparentPower;
 }
 
 /*!
@@ -397,13 +405,15 @@ void PZEM004Tv30::init(Stream* port, bool isSoft, uint8_t addr){
 bool PZEM004Tv30::updateValues()
 {
     //static uint8_t buffer[] = {0x00, CMD_RIR, 0x00, 0x00, 0x00, 0x0A, 0x00, 0x00};
-    static uint8_t response[25];
+    static uint8_t response[27];
 
     // If we read before the update time limit, do not update
     if( (unsigned long)(millis() - _lastRead)  >  UPDATE_TIME){
         // Record current time as _lastRead
         _lastRead = millis();
-    } else {
+    } 
+    else 
+    {  //Serial.println("Not Updating Values");
         return true;
     }
 
@@ -411,44 +421,54 @@ bool PZEM004Tv30::updateValues()
 
 
     // Read 10 registers starting at 0x00 (no check)
-    sendCmd8(CMD_RIR, 0x00, 0x0A, false);
+    sendCmd8(CMD_RIR, 0x0100, 0x0B, false);
 
 
-    if(receive(response, 25) != 25){ // Something went wrong
+    if(receive(response, 27) != 27){ // Something went wrong
         return false;
     }
 
-
-
+    // int32_t power32;   // 32-bit signed integer representation
+    // uint8_t power8[4];
+    UN_VALUE un_power;
+    pf_VALUE pwr_factor;
     // Update the current values
-    _currentValues.voltage = ((uint32_t)response[3] << 8 | // Raw voltage in 0.1V
-                              (uint32_t)response[4])/10.0;
+    _currentValues.voltage =  ((uint32_t)response[3] << 8 | // Raw voltage in 0.1V
+                              (uint32_t)response[4])/100.0;
 
-    _currentValues.current = ((uint32_t)response[5] << 8 | // Raw current in 0.001A
-                              (uint32_t)response[6] |
-                              (uint32_t)response[7] << 24 |
-                              (uint32_t)response[8] << 16) / 1000.0;
+    _currentValues.current =  ((uint32_t)response[5] << 8 | // Raw current in 0.001A
+                              (uint32_t)response[6] ) / 100.0;
 
-    _currentValues.power =   ((uint32_t)response[9] << 8 | // Raw power in 0.1W
-                              (uint32_t)response[10] |
-                              (uint32_t)response[11] << 24 |
-                              (uint32_t)response[12] << 16) / 10.0;
+    _currentValues.frequency = ((uint32_t)response[7] << 8 | // Raw Frequency in 0.1Hz
+                               (uint32_t)response[8]) / 100.0;
+      
+                               pwr_factor.pwrf = (response[9]);
+                               if (response[9] > 0x7F)
+                               {
+                                 pwr_factor.pf32 = response[9];
+                               }
+    _currentValues.pf =       (float)pwr_factor.pf32 / 100.0;                      
 
-    _currentValues.energy =  ((uint32_t)response[13] << 8 | // Raw Energy in 1Wh
-                              (uint32_t)response[14] |
-                              (uint32_t)response[15] << 24 |
-                              (uint32_t)response[16] << 16) / 1000.0;
+                              un_power.power8[2] =  response[10] ;
+                              un_power.power8[1] =  response[11];// Raw power in 0.1W
+                              un_power.power8[0] =  response[12];
+                              un_power.power8[3] = 0x00;
 
-    _currentValues.frequency=((uint32_t)response[17] << 8 | // Raw Frequency in 0.1Hz
-                              (uint32_t)response[18]) / 10.0;
+                              if (response[10] > 0x7F)
+                              {
+                                un_power.power8[3] = 0xFF; 
+                              }
 
-    _currentValues.pf =      ((uint32_t)response[19] << 8 | // Raw pf in 0.01
-                              (uint32_t)response[20])/100.0;
+                            _currentValues.power = un_power.power32 / 100.0;
 
-    _currentValues.alarms =  ((uint32_t)response[21] << 8 | // Raw alarm value
-                              (uint32_t)response[22]);
 
-    
+                            uint32_t temp_ap = ((uint32_t)response[13] << 16) + ((uint32_t) response[14] << 8) + response[15];
+     _currentValues.apparentPower =  ((float)temp_ap / 100.0);
+
+    _currentValues.energy =  ((uint32_t)response[16] << 24) + ((uint32_t)response[17] << 16) + ((uint32_t)response[18] << 8) +response[19];
+
+    _currentValues.energy_n = ((uint32_t)response[20] << 24) + ((uint32_t)response[21] << 16) + ((uint32_t)response[22] << 8) +response[23];
+
 
     return true;
 }
@@ -470,6 +490,7 @@ bool PZEM004Tv30::sendCmd8(uint8_t cmd, uint16_t rAddr, uint16_t val, bool check
     uint8_t sendBuffer[8]; // Send buffer
     uint8_t respBuffer[8]; // Response buffer (only used when check is true)
 
+
     if((slave_addr == 0xFFFF) ||
        (slave_addr < 0x01) ||
        (slave_addr > 0xF7)){
@@ -485,9 +506,14 @@ bool PZEM004Tv30::sendCmd8(uint8_t cmd, uint16_t rAddr, uint16_t val, bool check
     sendBuffer[4] = (val >> 8) & 0xFF;       // Set high byte of register value
     sendBuffer[5] = (val) & 0xFF;            // Set low byte =//=
 
-    setCRC(sendBuffer, 8);                   // Set CRC of frame
+    setCRC(sendBuffer, 8);       
+    
+    // Set CRC of frame
+  // Serial.printf("Command Sent :{0x%02X,0x%02X,0x%02X,0x%02X,0x%02X,0x%02X,0x%02X,0x%02X}\n",sendBuffer[0],sendBuffer[1],sendBuffer[2],sendBuffer[3],sendBuffer[4],sendBuffer[5],sendBuffer[6],sendBuffer[7]);
 
     _serial->write(sendBuffer, 8); // send frame
+
+    _serial->flush();
 
     if(check) {
         if(!receive(respBuffer, 8)){ // if check enabled, read the response
@@ -514,36 +540,35 @@ bool PZEM004Tv30::sendCmd8(uint8_t cmd, uint16_t rAddr, uint16_t val, bool check
  *
  * @return number of bytes read
 */
-uint16_t PZEM004Tv30::receive(uint8_t *resp, uint16_t len)
+uint16_t PZEM004Tv30::receive(uint8_t *resp, uint16_t len) 
 {
-      //* This has to only be enabled for Software serial
-    #if defined(PZEM004_SOFTSERIAL)
-        if(_isSoft)
-            ((SoftwareSerial *)_serial)->listen(); // Start software serial listen
-    #endif
-    unsigned long startTime = millis(); // Start time for Timeout
-    uint8_t index = 0; // Bytes we have read
-    while((index < len) && (millis() - startTime < READ_TIMEOUT))
-    {
-        if(_serial->available() > 0)
-        {
-            uint8_t c = (uint8_t)_serial->read();
+    //* This has to only be enabled for Software serial
+  #if (defined(PZEM004_SOFTSERIAL) && (defined(__AVR__)) || defined(ESP8266))
+      if(_isSoft)
+          ((SoftwareSerial *)_serial)->listen(); // Start software serial listen
+  #endif
+  unsigned long startTime = millis(); // Start time for Timeout
+  uint8_t index = 0; // Bytes we have read
+  while((index < len) && (millis() - startTime < READ_TIMEOUT))
+  {
+      if(_serial->available() > 0)
+      {
+          uint8_t c = (uint8_t)_serial->read();
 
-            resp[index++] = c;
-        }
-        yield();	// do background netw tasks while blocked for IO (prevents ESP watchdog trigger)
-    }
+          resp[index++] = c;
+      }
+      yield();	// do background netw tasks while blocked for IO (prevents ESP watchdog trigger)
+  }
 
-    // Check CRC with the number of bytes read
-    if(!checkCRC(resp, index)){
-        _isConnected = false; // We are no longer connected
-        return 0;
-    }
+  // Check CRC with the number of bytes read
+  if(!checkCRC(resp, index)){
+      _isConnected = false; // We are no longer connected
+      return 0;
+  }
 
-     _isConnected = true; // We received a reply 
-    return index;
+   _isConnected = true; // We received a reply 
+  return index;
 }
-
 /*!
  * PZEM004Tv30::checkCRC
  *
@@ -559,6 +584,8 @@ bool PZEM004Tv30::checkCRC(const uint8_t *buf, uint16_t len){
         return false;
 
     uint16_t crc = CRC16(buf, len - 2); // Compute CRC of data
+ //   Serial.printf("Computed CRC: %04X\n", crc);
+   // Serial.printf("Received CRC: %04X\n", ((uint16_t)buf[len-2]  | (uint16_t)buf[len-1] << 8));
     return ((uint16_t)buf[len-2]  | (uint16_t)buf[len-1] << 8) == crc;
 }
 
@@ -578,14 +605,72 @@ void PZEM004Tv30::setCRC(uint8_t *buf, uint16_t len){
         return;
 
     uint16_t crc = CRC16(buf, len - 2); // CRC of data
-
+    //Serial.printf("Computed CRC: %04X\n", crc);
     // Write high and low byte to last two positions
     buf[len - 2] = crc & 0xFF; // Low byte first
-    buf[len - 1] = (crc >> 8) & 0xFF; // High byte second
+    buf[len - 1] = (crc >> 8) & 0xFF;// High byte second
+
 }
+/* CRC ��λ�ֽ�ֵ�� */ 
+const byte auchCRCHi[] PROGMEM = {
+    0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41, 0x01, 0xC0, 
+    0x80, 0x41, 0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41, 
+    0x00, 0xC1, 0x81, 0x40, 0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 
+    0x80, 0x41, 0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81, 0x40, 
+    0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1, 
+    0x81, 0x40, 0x01, 0xC0, 0x80, 0x41, 0x01, 0xC0, 0x80, 0x41, 
+    0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1, 
+    0x81, 0x40, 0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41, 
+    0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41, 0x01, 0xC0, 
+    0x80, 0x41, 0x00, 0xC1, 0x81, 0x40, 0x00, 0xC1, 0x81, 0x40, 
+    0x01, 0xC0, 0x80, 0x41, 0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1, 
+    0x81, 0x40, 0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81, 0x40, 
+    0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41, 0x01, 0xC0, 
+    0x80, 0x41, 0x00, 0xC1, 0x81, 0x40, 0x00, 0xC1, 0x81, 0x40, 
+    0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 
+    0x80, 0x41, 0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81, 0x40, 
+    0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41, 0x01, 0xC0, 
+    0x80, 0x41, 0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41, 
+    0x00, 0xC1, 0x81, 0x40, 0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 
+    0x80, 0x41, 0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41, 
+    0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 
+    0x80, 0x41, 0x00, 0xC1, 0x81, 0x40, 0x00, 0xC1, 0x81, 0x40, 
+    0x01, 0xC0, 0x80, 0x41, 0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1, 
+    0x81, 0x40, 0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41, 
+    0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41, 0x01, 0xC0, 
+    0x80, 0x41, 0x00, 0xC1, 0x81, 0x40 
+    }; 
+    /* CRC��λ�ֽ�ֵ��*/ 
+    const byte auchCRCLo[] PROGMEM = { 
+    0x00, 0xC0, 0xC1, 0x01, 0xC3, 0x03, 0x02, 0xC2, 0xC6, 0x06, 
+    0x07, 0xC7, 0x05, 0xC5, 0xC4, 0x04, 0xCC, 0x0C, 0x0D, 0xCD, 
+    0x0F, 0xCF, 0xCE, 0x0E, 0x0A, 0xCA, 0xCB, 0x0B, 0xC9, 0x09, 
+    0x08, 0xC8, 0xD8, 0x18, 0x19, 0xD9, 0x1B, 0xDB, 0xDA, 0x1A, 
+    0x1E, 0xDE, 0xDF, 0x1F, 0xDD, 0x1D, 0x1C, 0xDC, 0x14, 0xD4, 
+    0xD5, 0x15, 0xD7, 0x17, 0x16, 0xD6, 0xD2, 0x12, 0x13, 0xD3, 
+    0x11, 0xD1, 0xD0, 0x10, 0xF0, 0x30, 0x31, 0xF1, 0x33, 0xF3, 
+    0xF2, 0x32, 0x36, 0xF6, 0xF7, 0x37, 0xF5, 0x35, 0x34, 0xF4, 
+    0x3C, 0xFC, 0xFD, 0x3D, 0xFF, 0x3F, 0x3E, 0xFE, 0xFA, 0x3A, 
+    0x3B, 0xFB, 0x39, 0xF9, 0xF8, 0x38, 0x28, 0xE8, 0xE9, 0x29, 
+    0xEB, 0x2B, 0x2A, 0xEA, 0xEE, 0x2E, 0x2F, 0xEF, 0x2D, 0xED, 
+    0xEC, 0x2C, 0xE4, 0x24, 0x25, 0xE5, 0x27, 0xE7, 0xE6, 0x26, 
+    0x22, 0xE2, 0xE3, 0x23, 0xE1, 0x21, 0x20, 0xE0, 0xA0, 0x60, 
+    0x61, 0xA1, 0x63, 0xA3, 0xA2, 0x62, 0x66, 0xA6, 0xA7, 0x67, 
+    0xA5, 0x65, 0x64, 0xA4, 0x6C, 0xAC, 0xAD, 0x6D, 0xAF, 0x6F, 
+    0x6E, 0xAE, 0xAA, 0x6A, 0x6B, 0xAB, 0x69, 0xA9, 0xA8, 0x68, 
+    0x78, 0xB8, 0xB9, 0x79, 0xBB, 0x7B, 0x7A, 0xBA, 0xBE, 0x7E, 
+    0x7F, 0xBF, 0x7D, 0xBD, 0xBC, 0x7C, 0xB4, 0x74, 0x75, 0xB5, 
+    0x77, 0xB7, 0xB6, 0x76, 0x72, 0xB2, 0xB3, 0x73, 0xB1, 0x71, 
+    0x70, 0xB0, 0x50, 0x90, 0x91, 0x51, 0x93, 0x53, 0x52, 0x92, 
+    0x96, 0x56, 0x57, 0x97, 0x55, 0x95, 0x94, 0x54, 0x9C, 0x5C, 
+    0x5D, 0x9D, 0x5F, 0x9F, 0x9E, 0x5E, 0x5A, 0x9A, 0x9B, 0x5B, 
+    0x99, 0x59, 0x58, 0x98, 0x88, 0x48, 0x49, 0x89, 0x4B, 0x8B, 
+    0x8A, 0x4A, 0x4E, 0x8E, 0x8F, 0x4F, 0x8D, 0x4D, 0x4C, 0x8C, 
+    0x44, 0x84, 0x85, 0x45, 0x87, 0x47, 0x46, 0x86, 0x82, 0x42, 
+    0x43, 0x83, 0x41, 0x81, 0x80, 0x40 
+    };
 
-
-// Pre computed CRC table
+//Pre computed CRC table
 static const uint16_t crcTable[] PROGMEM = {
     0X0000, 0XC0C1, 0XC181, 0X0140, 0XC301, 0X03C0, 0X0280, 0XC241,
     0XC601, 0X06C0, 0X0780, 0XC741, 0X0500, 0XC5C1, 0XC481, 0X0440,
@@ -635,15 +720,21 @@ static const uint16_t crcTable[] PROGMEM = {
 */
 uint16_t PZEM004Tv30::CRC16(const uint8_t *data, uint16_t len)
 {
-    uint8_t nTemp; // CRC table index
-    uint16_t crc = 0xFFFF; // Default value
-
-    while (len--)
-    {
-        nTemp = *data++ ^ crc;
-        crc >>= 8;
-        crc ^= (uint16_t)pgm_read_word(&crcTable[nTemp]);
+    uint16_t crc = 0xFFFF;
+    
+    for (uint8_t i = 0; i < len; i++) {
+        crc ^= (uint16_t)data[i];
+        
+        for (uint8_t j = 0; j < 8; j++) {
+            if (crc & 0x0001) {
+                crc >>= 1;
+                crc ^= 0xA001;
+            } else {
+                crc >>= 1;
+            }
+        }
     }
+    
     return crc;
 }
 

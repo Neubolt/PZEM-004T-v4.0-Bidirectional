@@ -46,11 +46,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 /* Disable Software Serial completely by defining: */
 // #define PZEM004_NO_SWSERIAL
 
-#ifndef PZEM004_NO_SWSERIAL
- /* Software serial is only available for AVRs and ESP8266 */
- #if defined(__AVR__) || defined(ESP8266)
- #define PZEM004_SOFTSERIAL
- #endif
+#if (not defined(PZEM004_NO_SWSERIAL) && (defined(__AVR__) || defined(ESP8266)) && not defined(ESP32))
+/* Software serial is only available for AVRs and ESP8266 */
+#define PZEM004_SOFTSERIAL
 #endif
 
 #if defined(PZEM004_SOFTSERIAL)
@@ -59,7 +57,17 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
 #define PZEM_DEFAULT_ADDR   0xF8
-#define PZEM_BAUD_RATE      9600
+#define PZEM_BAUD_RATE      2400
+
+typedef union {
+    int32_t power32;   // 32-bit signed integer representation
+    byte power8[4]; // 4-byte array representation
+} UN_VALUE;
+
+typedef union {
+    int8_t pf32;   // 32-bit signed integer representation
+    byte pwrf; // 4-byte array representation
+} pf_VALUE;
 
 
 class PZEM004Tv30
@@ -100,7 +108,9 @@ public:
     float voltage();
     float current();
     float power();
+    float apparentPower();
     float energy();
+    float energy_n();
     float frequency();
     float pf();
 
@@ -134,8 +144,10 @@ private:
     struct {
         float voltage;
         float current;
+        float apparentPower;
         float power;
         float energy;
+        float energy_n;
         float frequency;
         float pf;
         uint16_t alarms;
@@ -190,7 +202,8 @@ void printBuf(uint8_t* buffer, uint16_t len) {
     #define DEBUGBUF(buf, len) printBuf(buf, len)
 
 
-#else
+
+    #else
     // Debugging mode off, disable the macros
     #define DEBUG(...)
     #define DEBUGLN(...)
