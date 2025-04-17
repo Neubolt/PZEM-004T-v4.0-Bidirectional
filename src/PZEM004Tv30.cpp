@@ -47,7 +47,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #define UPDATE_TIME     200
 
 #define RESPONSE_SIZE 32
-#define READ_TIMEOUT 1500
+#define READ_TIMEOUT 300
 
 #define INVALID_ADDRESS 0x00
 
@@ -408,14 +408,11 @@ bool PZEM004Tv30::updateValues()
     static uint8_t response[27];
 
     // If we read before the update time limit, do not update
-    if( (unsigned long)(millis() - _lastRead)  >  UPDATE_TIME){
-        // Record current time as _lastRead
-        _lastRead = millis();
-    } 
-    else 
-    {  //Serial.println("Not Updating Values");
+    // If we read before the update time limit, do not update
+    if(_lastRead + UPDATE_TIME > millis()){
         return true;
     }
+
 
     DEBUGLN("Updating Values");
 
