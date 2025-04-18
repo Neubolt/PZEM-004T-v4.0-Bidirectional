@@ -204,6 +204,20 @@ float PZEM004Tv30::apparentPower()
  *
  * @return active energy in kWh
 */
+float PZEM004Tv30::energy_n()
+{
+    if(!updateValues()) // Update vales if necessary
+        return NAN; // Update did not work, return NAN
+
+    return _currentValues.energy_n;
+}
+/*!
+ * PZEM004Tv30::energy
+ *
+ * Get Active energy in kWh since last reset
+ *
+ * @return active energy in kWh
+*/
 float PZEM004Tv30::energy()
 {
     if(!updateValues()) // Update vales if necessary
@@ -211,6 +225,7 @@ float PZEM004Tv30::energy()
 
     return _currentValues.energy;
 }
+
 
 /*!
  * PZEM004Tv30::frequency
