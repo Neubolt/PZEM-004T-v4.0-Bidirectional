@@ -242,6 +242,22 @@ float PZEM004Tv30::pf()
     return _currentValues.pf;
 }
 
+
+float PZEM004Tv30::getVoltage() {
+    return _currentValues.voltage;
+}
+
+float PZEM004Tv30::getCurrent() {
+    return _currentValues.current;
+}
+
+float PZEM004Tv30::getPower() {
+    return _currentValues.power;
+}
+
+float PZEM004Tv30::getPf() {
+    return _currentValues.pf;
+}
 /*!
  * PZEM004Tv30::resetEnergy
  *

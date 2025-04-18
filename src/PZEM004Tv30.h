@@ -115,6 +115,11 @@ public:
     float pf();
 
 
+    float getVoltage();
+    float getCurrent();
+    float getPower();
+    float getPf();
+
     bool setAddress(uint8_t addr);
     uint8_t getAddress();
     uint8_t readAddress(bool update = false);
