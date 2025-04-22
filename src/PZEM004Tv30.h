@@ -109,8 +109,8 @@ public:
     float current();
     float power();
     float apparentPower();
-    float energy();
-    float energy_n();
+    uin32_t energy();
+    uin32_t energy_n();
     float frequency();
     float pf();
 
@@ -151,8 +151,8 @@ private:
         float current;
         float apparentPower;
         float power;
-        float energy;
-        float energy_n;
+        uin32_t energy;
+        uin32_t energy_n;
         float frequency;
         float pf;
         uint16_t alarms;

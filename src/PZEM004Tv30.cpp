@@ -204,7 +204,7 @@ float PZEM004Tv30::apparentPower()
  *
  * @return active energy in kWh
 */
-float PZEM004Tv30::energy_n()
+uin32_t PZEM004Tv30::energy_n()
 {
     if(!updateValues()) // Update vales if necessary
         return NAN; // Update did not work, return NAN
@@ -218,7 +218,7 @@ float PZEM004Tv30::energy_n()
  *
  * @return active energy in kWh
 */
-float PZEM004Tv30::energy()
+uin32_t PZEM004Tv30::energy()
 {
     if(!updateValues()) // Update vales if necessary
         return NAN; // Update did not work, return NAN
@@ -493,9 +493,9 @@ bool PZEM004Tv30::updateValues()
                             uint32_t temp_ap = ((uint32_t)response[13] << 16) + ((uint32_t) response[14] << 8) + response[15];
      _currentValues.apparentPower =  ((float)temp_ap / 100.0);
 
-    _currentValues.energy =  (((uint32_t)response[16] << 24) + ((uint32_t)response[17] << 16) + ((uint32_t)response[18] << 8) +response[19]) / 1000.0 ;
+    _currentValues.energy =  (((uint32_t)response[16] << 24) + ((uint32_t)response[17] << 16) + ((uint32_t)response[18] << 8) +response[19]);
 
-    _currentValues.energy_n = (((uint32_t)response[20] << 24) + ((uint32_t)response[21] << 16) + ((uint32_t)response[22] << 8) +response[23]) / 1000.0;
+    _currentValues.energy_n = (((uint32_t)response[20] << 24) + ((uint32_t)response[21] << 16) + ((uint32_t)response[22] << 8) +response[23]);
 
 
     return true;
