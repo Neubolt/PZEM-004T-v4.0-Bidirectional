@@ -204,7 +204,7 @@ float PZEM004Tv30::apparentPower()
  *
  * @return active energy in kWh
 */
-uint32_t PZEM004Tv30::energy_n()
+float PZEM004Tv30::energy_n()
 {
     if(!updateValues()) // Update vales if necessary
         return NAN; // Update did not work, return NAN
@@ -218,7 +218,7 @@ uint32_t PZEM004Tv30::energy_n()
  *
  * @return active energy in kWh
 */
-uint32_t PZEM004Tv30::energy()
+float PZEM004Tv30::energy()
 {
     if(!updateValues()) // Update vales if necessary
         return NAN; // Update did not work, return NAN
