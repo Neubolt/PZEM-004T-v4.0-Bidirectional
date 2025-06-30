@@ -119,6 +119,7 @@ public:
     float getCurrent();
     float getPower();
     float getPf();
+    float getFrequency();
 
     bool setAddress(uint8_t addr);
     uint8_t getAddress();
