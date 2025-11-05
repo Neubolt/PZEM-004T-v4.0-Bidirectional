@@ -120,6 +120,8 @@ public:
     float getPower();
     float getPf();
     float getFrequency();
+    float getEnergy();
+    float getEnergy_n();
 
     bool setAddress(uint8_t addr);
     uint8_t getAddress();

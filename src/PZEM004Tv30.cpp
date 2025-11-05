@@ -276,6 +276,12 @@ float PZEM004Tv30::getPf() {
 float PZEM004Tv30::getFrequency() {
     return _currentValues.frequency;
 }
+float PZEM004Tv30::getEnergy() {
+    return _currentValues.energy;
+}
+float PZEM004Tv30::getEnergy_n() {
+    return _currentValues.energy_n;
+}
 /*!
  * PZEM004Tv30::resetEnergy
  *
